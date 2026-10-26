@@ -18,8 +18,6 @@ MAX_RETRIES = 5
 
 
 class TMDBClient:
-    """Minimal TMDB v3 client accepting either an API key or a v4 read access token."""
-
     def __init__(self, credential: str, timeout: float = 10.0) -> None:
         self._session = requests.Session()
         self._params: dict[str, str] = {}

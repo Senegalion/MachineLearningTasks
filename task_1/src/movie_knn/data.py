@@ -8,7 +8,6 @@ RATING_COLUMNS = ["id", "user_id", "movie_id", "rating"]
 
 
 def load_movies(path: Path = config.MOVIES_PATH) -> pd.DataFrame:
-    # movie.csv uses classic Mac (CR) line endings, which pandas does not split on.
     text = path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
     rows = [line.split(";", 2) for line in text.splitlines() if line.strip()]
     movies = pd.DataFrame(rows, columns=["movie_id", "tmdb_id", "title"])

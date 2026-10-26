@@ -59,7 +59,6 @@ FEATURES: tuple[FeatureSpec, ...] = (
 
 
 def extract_features(movies: pd.DataFrame, details: dict[int, dict]) -> pd.DataFrame:
-    """Feature table (one row per movie_id) built from TMDB movie details."""
     rows = {
         movie_id: {spec.name: spec.extract(details[tmdb_id]) for spec in FEATURES}
         for movie_id, tmdb_id in movies["tmdb_id"].items()
@@ -69,8 +68,6 @@ def extract_features(movies: pd.DataFrame, details: dict[int, dict]) -> pd.DataF
 
 @dataclass(frozen=True)
 class SimilarityTensor:
-    """Standardized per-feature similarity matrices, stacked as (n_features, n_movies, n_movies)."""
-
     feature_names: tuple[str, ...]
     movie_ids: np.ndarray
     values: np.ndarray

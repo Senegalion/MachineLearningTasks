@@ -1,8 +1,3 @@
-"""Vectorized kNN rating prediction evaluated for every neighbourhood size 1..max_k at once.
-
-All functions accept a leading batch dimension (users), so a whole group of users is processed in one call.
-"""
-
 from dataclasses import dataclass
 
 import numpy as np
@@ -27,11 +22,6 @@ METHODS = tuple(Method(aggregation, weighting) for aggregation in AGGREGATIONS f
 
 
 def predict_all_k(similarity: np.ndarray, ratings: np.ndarray, max_k: int) -> np.ndarray:
-    """Predictions for every method and neighbourhood size.
-
-    similarity: (..., n_query, n_train), ratings: (..., n_train).
-    Returns an integer array of shape (len(METHODS), max_k, ..., n_query).
-    """
     max_k = min(max_k, similarity.shape[-1])
     order = np.argsort(-similarity, axis=-1, kind="stable")[..., :max_k]
     neighbour_similarity = np.take_along_axis(similarity, order, axis=-1)
@@ -60,24 +50,18 @@ def predict_all_k(similarity: np.ndarray, ratings: np.ndarray, max_k: int) -> np
 
 
 def leave_one_out_predictions(similarity: np.ndarray, ratings: np.ndarray, max_k: int) -> np.ndarray:
-    """Like predict_all_k, but each training movie is predicted from all the others.
-
-    similarity: (..., n, n). Returns shape (len(METHODS), min(max_k, n - 1), ..., n).
-    """
     n = similarity.shape[-1]
     masked = np.where(np.eye(n, dtype=bool), -np.inf, similarity)
     return predict_all_k(masked, ratings, min(max_k, n - 1))
 
 
 def objective(predictions: np.ndarray, truth: np.ndarray, mae_penalty: float) -> np.ndarray:
-    """Accuracy with a small MAE penalty that breaks ties in favour of near misses. Averages the last axis."""
     accuracy = (predictions == truth).mean(axis=-1)
     mae = np.abs(predictions - truth).mean(axis=-1)
     return accuracy - mae_penalty * mae
 
 
 def smooth_over_k(scores: np.ndarray, window: int) -> np.ndarray:
-    """Moving average along the k axis (axis 1), so that k is chosen from a stable region rather than a spike."""
     if window <= 1:
         return scores
     pad = window // 2
