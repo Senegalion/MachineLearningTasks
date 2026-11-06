@@ -7,19 +7,12 @@ import pandas as pd
 from movie_dt import config, data, tmdb
 from movie_dt.evaluation import cross_validate
 from movie_dt.features import TabularFeatures, extract_features
-from movie_dt.model import ModelConfig, PerUserClassifier, UserMeanBaseline, UserModeBaseline, forest_recommender, tree_recommender
+from movie_dt.model import PerUserClassifier, UserMeanBaseline, UserModeBaseline, forest_recommender, tree_recommender
 from movie_dt.visualize import draw_tree
 
 logger = logging.getLogger("movie_dt")
 
 CONTENT: TabularFeatures | None = None
-
-EXPERIMENTS = {
-    "tree": lambda content: tree_recommender(content),
-    "forest": lambda content: forest_recommender(content),
-    "tree-tmdb-only": lambda content: PerUserClassifier(content, ModelConfig(kind="tree", use_collaborative=False)),
-    "forest-tmdb-only": lambda content: PerUserClassifier(content, ModelConfig(kind="forest", use_collaborative=False)),
-}
 
 BASELINES = {
     "user-mode": UserModeBaseline,
@@ -31,10 +24,17 @@ def load_content() -> TabularFeatures:
     global CONTENT
     if CONTENT is None:
         movies = data.load_movies()
-        details = tmdb.load_cached(movies["tmdb_id"])
-        CONTENT = TabularFeatures.from_raw(extract_features(movies, details))
-        logger.info("Tabular TMDB features: %d movies × %d columns", len(CONTENT.movie_ids), len(CONTENT.feature_names))
+        CONTENT = TabularFeatures.from_raw(extract_features(movies, tmdb.load_cached(movies["tmdb_id"])))
+        logger.info("TMDB features: %d movies × %d columns", len(CONTENT.movie_ids), len(CONTENT.feature_names))
     return CONTENT
+
+
+def experiment_factories() -> dict:
+    content = load_content()
+    return {
+        "tree": lambda: tree_recommender(content),
+        "forest": lambda: forest_recommender(content),
+    }
 
 
 def fetch(args: argparse.Namespace) -> None:
@@ -42,12 +42,8 @@ def fetch(args: argparse.Namespace) -> None:
 
 
 def evaluate(args: argparse.Namespace) -> None:
-    content = load_content()
     train = data.load_train()
-    factories = {
-        **BASELINES,
-        **{name: (lambda make=make: make(content)) for name, make in EXPERIMENTS.items()},
-    }
+    factories = {**BASELINES, **experiment_factories()}
     names = args.only or list(factories)
     summary = {}
     for name in names:
@@ -59,13 +55,10 @@ def evaluate(args: argparse.Namespace) -> None:
 
 
 def _fit(kind: str) -> PerUserClassifier:
-    make = EXPERIMENTS[kind]
-    return make(load_content()).fit(data.load_train())
+    return experiment_factories()[kind]().fit(data.load_train())
 
 
 def _choose_user(model: PerUserClassifier) -> int:
-    """Pick a person whose tree actually branched and whose ratings are not a single class."""
-
     def score(user_id: int) -> tuple[int, int, int]:
         estimator = model.models_[user_id]
         root = estimator.root_ if hasattr(estimator, "root_") else estimator.trees_[0].root_
@@ -111,7 +104,7 @@ def parse_args() -> argparse.Namespace:
 
     evaluate_parser = commands.add_parser("evaluate", help="compare models with cross-validation on train.csv")
     evaluate_parser.add_argument("--folds", type=int, default=5)
-    evaluate_parser.add_argument("--only", nargs="+", choices=[*BASELINES, *EXPERIMENTS], help="models to evaluate")
+    evaluate_parser.add_argument("--only", nargs="+", choices=[*BASELINES, "tree", "forest"])
     evaluate_parser.set_defaults(handler=evaluate)
 
     predict_parser = commands.add_parser("predict", help="fit on train.csv and write both submission files plus tree.png")
@@ -123,7 +116,7 @@ def parse_args() -> argparse.Namespace:
 
     draw_parser = commands.add_parser("draw", help="fit the per-user trees and write tree.png")
     draw_parser.add_argument("--tree-image", type=Path, default=config.TREE_IMAGE_PATH)
-    draw_parser.add_argument("--tree-user", type=int, help="user id to draw; default is a branched tree with mixed ratings")
+    draw_parser.add_argument("--tree-user", type=int, help="user id to draw")
     draw_parser.set_defaults(handler=draw)
 
     return parser.parse_args()
