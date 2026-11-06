@@ -1,5 +1,3 @@
-"""Pairwise similarity functions, one per feature type. Each returns an (n, n) matrix with values in [0, 1]."""
-
 from collections.abc import Sequence
 
 import numpy as np
@@ -9,7 +7,6 @@ from sklearn.preprocessing import MultiLabelBinarizer
 
 
 def set_similarity(values: Sequence[frozenset[str]]) -> np.ndarray:
-    """Jaccard index; two empty sets are treated as dissimilar."""
     incidence = MultiLabelBinarizer(sparse_output=True).fit_transform(values).astype(np.float64)
     intersection = (incidence @ incidence.T).toarray()
     sizes = np.asarray(incidence.sum(axis=1)).ravel()
@@ -24,10 +21,6 @@ def categorical_similarity(values: Sequence[str | None]) -> np.ndarray:
 
 
 def numeric_similarity(values: Sequence[float], log_scale: bool = False) -> np.ndarray:
-    """1 - |a - b| / spread, where spread is the 5-95 percentile range, so outliers do not compress the scale.
-
-    Missing values get the median similarity of the feature instead of an arbitrary extreme.
-    """
     x = np.asarray(values, dtype=np.float64)
     if log_scale:
         x = np.log1p(x)
@@ -41,7 +34,6 @@ def numeric_similarity(values: Sequence[float], log_scale: bool = False) -> np.n
 
 
 def text_similarity(values: Sequence[str]) -> np.ndarray:
-    """Cosine similarity of TF-IDF vectors."""
     tfidf = TfidfVectorizer(stop_words="english", sublinear_tf=True, min_df=2).fit_transform(values)
     return np.clip(cosine_similarity(tfidf), 0.0, 1.0)
 
@@ -56,7 +48,6 @@ SIMILARITY_BY_TYPE = {
 
 
 def standardize(similarity: np.ndarray) -> np.ndarray:
-    """Z-score using off-diagonal entries, so that features with different spreads get a comparable scale."""
     off_diagonal = similarity[~np.eye(len(similarity), dtype=bool)]
     std = off_diagonal.std()
     if std == 0:

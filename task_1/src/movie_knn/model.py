@@ -35,8 +35,6 @@ class UserParams:
 
 @dataclass(frozen=True)
 class _UserBatch:
-    """Users with the same number of training ratings, so their data stacks into dense arrays."""
-
     user_ids: np.ndarray
     positions: np.ndarray
     ratings: np.ndarray
@@ -48,13 +46,6 @@ class _UserBatch:
 
 
 class KNNRecommender:
-    """Per-user kNN over movies; each user gets their own neighbourhood size, aggregation and optionally feature weights.
-
-    Movie similarity is a weighted average of standardized per-feature similarities: the fixed content features
-    (TMDB) and, optionally, the rating pattern of other users, which is learned from the training ratings.
-    Hyperparameters are selected with leave-one-out validation on the user's own training ratings.
-    """
-
     RATING_PATTERN = "rating_pattern"
 
     def __init__(self, content: SimilarityTensor, config: ModelConfig | None = None) -> None:
@@ -143,7 +134,6 @@ class KNNRecommender:
         return similarity / weights.sum()
 
     def _validation_scores(self, batch: _UserBatch, user_weights: np.ndarray) -> np.ndarray:
-        """Smoothed leave-one-out objective with shape (n_methods, n_k, n_users)."""
         normalized = user_weights / user_weights.sum(axis=1, keepdims=True)
         similarity = np.einsum("uf,funm->unm", normalized, batch.feature_similarity)
         predictions = leave_one_out_predictions(similarity, batch.ratings, self.config.max_k)
@@ -161,7 +151,6 @@ class KNNRecommender:
         return total / sum(b.size for b in batches)
 
     def _learn_global_weights(self, batches: list[_UserBatch], weights: np.ndarray) -> np.ndarray:
-        """Coordinate ascent over a grid of feature weights shared by all users."""
         best = self._mean_best_score(batches, weights)
         for _ in range(self.config.global_passes):
             improved = False
@@ -180,11 +169,6 @@ class KNNRecommender:
         return weights
 
     def _learn_user_weights(self, batch: _UserBatch, user_weights: np.ndarray) -> np.ndarray:
-        """Per-user coordinate ascent starting from the global weights.
-
-        A change is accepted only if it beats the current score by per_user_min_gain, which limits overfitting
-        to the few ratings available for a single user.
-        """
         best = self._best_scores(batch, user_weights)
         for _ in range(self.config.per_user_passes):
             for feature in range(user_weights.shape[1]):
@@ -213,8 +197,6 @@ class KNNRecommender:
 
 
 class UserModeBaseline:
-    """Predicts each user's most frequent training rating."""
-
     def fit(self, train: pd.DataFrame) -> "UserModeBaseline":
         self.modes_ = train.groupby("user_id")["rating"].agg(lambda r: r.mode().max())
         return self
@@ -224,8 +206,6 @@ class UserModeBaseline:
 
 
 class UserMeanBaseline:
-    """Predicts each user's rounded mean training rating."""
-
     def fit(self, train: pd.DataFrame) -> "UserMeanBaseline":
         self.means_ = train.groupby("user_id")["rating"].mean()
         return self
