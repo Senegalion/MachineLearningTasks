@@ -22,6 +22,7 @@ def load_ratings(path: Path) -> pd.DataFrame:
         header=None,
         names=RATING_COLUMNS,
         na_values=["NULL"],
+        # Loading the rating column as Int64 to handle missing values in task.csv
         dtype={"id": int, "user_id": int, "movie_id": int, "rating": "Int64"},
     )
 

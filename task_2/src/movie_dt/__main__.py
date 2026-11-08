@@ -7,7 +7,7 @@ import pandas as pd
 from movie_dt import config, data, tmdb
 from movie_dt.evaluation import cross_validate
 from movie_dt.features import TabularFeatures, extract_features
-from movie_dt.model import PerUserClassifier, UserMeanBaseline, UserModeBaseline, forest_recommender, tree_recommender
+from movie_dt.model import ModelConfig, PerUserClassifier, UserMeanBaseline, UserModeBaseline
 from movie_dt.visualize import draw_tree
 
 logger = logging.getLogger("movie_dt")
@@ -32,8 +32,8 @@ def load_content() -> TabularFeatures:
 def experiment_factories() -> dict:
     content = load_content()
     return {
-        "tree": lambda: tree_recommender(content),
-        "forest": lambda: forest_recommender(content),
+        "tree": lambda: PerUserClassifier(content, ModelConfig(kind="tree")),
+        "forest": lambda: PerUserClassifier(content, ModelConfig(kind="forest")),
     }
 
 
@@ -50,7 +50,7 @@ def evaluate(args: argparse.Namespace) -> None:
         logger.info("Evaluating %s", name)
         scores = cross_validate(factories[name], train, n_folds=args.folds)
         summary[name] = scores.mean().to_dict() | {"accuracy_std": scores["accuracy"].std()}
-    report = pd.DataFrame(summary).T[["accuracy", "accuracy_std", "mae", "rmse"]]
+    report = pd.DataFrame(summary).T[["accuracy", "accuracy_std", "accuracy_pm1", "mae", "rmse"]]
     print(report.round(4).to_string())
 
 
@@ -60,10 +60,9 @@ def _fit(kind: str) -> PerUserClassifier:
 
 def _choose_user(model: PerUserClassifier) -> int:
     def score(user_id: int) -> tuple[int, int, int]:
-        estimator = model.models_[user_id]
-        root = estimator.root_ if hasattr(estimator, "root_") else estimator.trees_[0].root_
-        depth = estimator.depth() if hasattr(estimator, "depth") else estimator.trees_[0].depth()
-        return (int(not root.is_leaf), int((root.class_counts > 0).sum()), depth)
+        tree = model.models_[user_id]
+        root = tree.root_
+        return (int(not root.is_leaf), int((root.class_counts > 0).sum()), tree.depth())
 
     return max(model.models_, key=score)
 
@@ -73,9 +72,8 @@ def _save_tree_image(model: PerUserClassifier, user_id: int | None, path: Path) 
         raise RuntimeError("No fitted trees to draw.")
     if user_id is None:
         user_id = _choose_user(model)
-    estimator = model.models_[user_id]
-    root = estimator.root_ if hasattr(estimator, "root_") else estimator.trees_[0].root_
-    draw_tree(root, model.feature_names_[user_id], path, title=f"Decision tree for user {user_id}")
+    root = model.models_[user_id].root_
+    draw_tree(root, model.content.feature_names, path, title=f"Decision tree for user {user_id}")
     logger.info("Saved decision tree for user %s to %s", user_id, path)
 
 

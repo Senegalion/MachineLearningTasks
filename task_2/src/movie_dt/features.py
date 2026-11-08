@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-TOP_CAST = 8
+TOP_CAST = 3
 
 
 @dataclass(frozen=True)
@@ -49,16 +49,20 @@ def _vote_count(details: dict) -> float:
     return float(details["vote_count"]) if details.get("vote_count") else np.nan
 
 
-def _popularity(details: dict) -> float:
-    return float(details["popularity"]) if details.get("popularity") else np.nan
+def _budget(details: dict) -> float:
+    return float(details["budget"]) if details.get("budget") else np.nan
 
 
-def _in_collection(details: dict) -> float:
-    return 1.0 if details.get("belongs_to_collection") else 0.0
+def _revenue(details: dict) -> float:
+    return float(details["revenue"]) if details.get("revenue") else np.nan
 
 
-def _adult(details: dict) -> float:
-    return 1.0 if details.get("adult") else 0.0
+def _revenue_budget_ratio(details: dict) -> float:
+    budget = details.get("budget") or 0
+    revenue = details.get("revenue") or 0
+    if budget <= 0 or revenue <= 0:
+        return np.nan
+    return float(revenue) / float(budget)
 
 
 FEATURES: tuple[FeatureSpec, ...] = (
@@ -66,12 +70,12 @@ FEATURES: tuple[FeatureSpec, ...] = (
     FeatureSpec("directors", _directors),
     FeatureSpec("cast", _top_cast),
     FeatureSpec("year", _year),
+    FeatureSpec("budget", _budget),
+    FeatureSpec("revenue", _revenue),
     FeatureSpec("runtime", _runtime),
     FeatureSpec("vote_average", _vote_average),
     FeatureSpec("vote_count", _vote_count),
-    FeatureSpec("popularity", _popularity),
-    FeatureSpec("in_collection", _in_collection),
-    FeatureSpec("adult", _adult),
+    FeatureSpec("revenue_budget_ratio", _revenue_budget_ratio),
 )
 
 
@@ -106,9 +110,7 @@ def _one_hot(values: pd.Series, prefix: str) -> tuple[np.ndarray, list[str]]:
             matrix[i, lookup[name]] = 1.0
     return matrix, [f"{prefix}:{name}" for name in vocab]
 
-
-NUMERIC = ("year", "runtime", "vote_average", "vote_count", "popularity")
-BINARY = ("in_collection", "adult")
+NUMERIC = ("year", "runtime", "vote_average", "vote_count", "revenue_budget_ratio", "budget", "revenue")
 SETS = (("genres", "genre"), ("directors", "director"), ("cast", "cast"))
 
 
@@ -128,9 +130,6 @@ class TabularFeatures:
             names.extend(column_names)
         for column in NUMERIC:
             blocks.append(_fill_numeric(raw[column]))
-            names.append(column)
-        for column in BINARY:
-            blocks.append(raw[column].to_numpy(dtype=np.float64))
             names.append(column)
         return cls(tuple(names), raw.index.to_numpy(), np.column_stack(blocks))
 

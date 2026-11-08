@@ -1,5 +1,5 @@
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -20,22 +20,19 @@ class ModelConfig:
 class PerUserClassifier:
     """One tree or forest per person, trained on that person's rated movies."""
 
-    def __init__(self, content: TabularFeatures, config: ModelConfig | None = None) -> None:
+    def __init__(self, content: TabularFeatures, config: ModelConfig) -> None:
         self.content = content
-        self.config = config or ModelConfig()
+        self.config = config
         self.models_: dict[int, DecisionTree | RandomForest] = {}
-        self.feature_names_: dict[int, tuple[str, ...]] = {}
         self._unseen_user_rating = 0
 
     def fit(self, train: pd.DataFrame) -> "PerUserClassifier":
         self._unseen_user_rating = int(train["rating"].mode().iloc[0])
         self.models_.clear()
-        self.feature_names_.clear()
         for user_id, rows in train.groupby("user_id"):
             user_id = int(user_id)
             x = self.content.rows(rows["movie_id"].to_numpy())
             y = rows["rating"].to_numpy(dtype=int)
-            self.feature_names_[user_id] = self.content.feature_names
             self.models_[user_id] = self._make_estimator().fit(x, y)
         return self
 
@@ -54,20 +51,6 @@ class PerUserClassifier:
         if self.config.kind == "forest":
             return RandomForest(self.config.forest)
         return DecisionTree(self.config.tree)
-
-
-def tree_recommender(content: TabularFeatures, **overrides) -> PerUserClassifier:
-    config = ModelConfig(kind="tree")
-    if overrides:
-        config = replace(config, tree=replace(config.tree, **overrides))
-    return PerUserClassifier(content, config)
-
-
-def forest_recommender(content: TabularFeatures, **overrides) -> PerUserClassifier:
-    config = ModelConfig(kind="forest")
-    if overrides:
-        config = replace(config, forest=replace(config.forest, **overrides))
-    return PerUserClassifier(content, config)
 
 
 class UserModeBaseline:

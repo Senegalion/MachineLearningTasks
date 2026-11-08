@@ -18,10 +18,7 @@ submission:
 tree:
 	$(RUN) draw --tree-image tree.png
 
-test:
-	$(PYTHON) -m pytest -q
-
 zip:
 	rm -f code.zip
-	zip -r code.zip src tests resources Makefile pyproject.toml requirements.txt README.md .env.example \
+	zip -r code.zip src Makefile pyproject.toml requirements.txt README.md .env.example \
 		-x '*/__pycache__/*' '*.pyc' '*/.DS_Store'

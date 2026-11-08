@@ -17,11 +17,6 @@ def gini(counts: np.ndarray) -> float:
     return float(1.0 - np.dot(probabilities, probabilities))
 
 
-def majority_label(labels: np.ndarray) -> int:
-    counts = np.bincount(labels, minlength=N_CLASSES)
-    return majority_from_counts(counts, labels.mean() if len(labels) else 0.0)
-
-
 def majority_from_counts(counts: np.ndarray, mean: float) -> int:
     tied = np.flatnonzero(counts == counts.max())
     return int(tied[np.argmin(np.abs(tied - mean))])
@@ -57,22 +52,8 @@ class TreeConfig:
     min_samples_split: int = 8
     min_samples_leaf: int = 4
     min_impurity_decrease: float = 1e-4
-    max_features: int | float | str | None = None
+    max_features: str | None = None
     random_state: int = RANDOM_STATE
-
-
-def _max_features(n_features: int, spec: int | float | str | None) -> int:
-    if spec is None:
-        return n_features
-    if spec == "sqrt":
-        value = int(np.sqrt(n_features))
-    elif spec == "log2":
-        value = int(np.log2(n_features)) if n_features > 1 else 1
-    elif isinstance(spec, float) and spec < 1:
-        value = int(np.ceil(spec * n_features))
-    else:
-        value = int(spec)
-    return max(1, min(n_features, value))
 
 
 def _best_split(
@@ -81,7 +62,7 @@ def _best_split(
     feature_indices: np.ndarray,
     min_leaf: int,
     min_decrease: float,
-) -> tuple[int, float, float] | None:
+) -> tuple[int, float] | None:
     n_samples = len(y)
     if n_samples < 2 * min_leaf:
         return None
@@ -112,19 +93,17 @@ def _best_split(
         return None
     row, column = (int(index[0]), int(index[1]))
     threshold = 0.5 * (sorted_values[row, column] + sorted_values[row + 1, column])
-    return int(feature_indices[column]), float(threshold), best_gain
+    return int(feature_indices[column]), float(threshold)
 
 
 class DecisionTree:
-    def __init__(self, config: TreeConfig | None = None, rng: np.random.Generator | None = None) -> None:
-        self.config = config or TreeConfig()
-        self.rng = rng if rng is not None else np.random.default_rng(self.config.random_state)
+    def __init__(self, config: TreeConfig, rng: np.random.Generator | None = None) -> None:
+        self.config = config
+        self.rng = rng if rng is not None else np.random.default_rng(config.random_state)
         self.root_: Node | None = None
-        self.n_features_: int = 0
 
     def fit(self, x: np.ndarray, y: np.ndarray) -> "DecisionTree":
         y = np.asarray(y, dtype=int)
-        self.n_features_ = x.shape[1]
         self.root_ = self._grow(x, y, depth=0)
         return self
 
@@ -133,7 +112,8 @@ class DecisionTree:
 
     def _predict_one(self, row: np.ndarray) -> int:
         node = self.root_
-        assert node is not None
+        if node is None:
+            return 0
         while not node.is_leaf:
             node = node.left if row[node.feature_index] <= node.threshold else node.right
         return node.prediction
@@ -145,17 +125,18 @@ class DecisionTree:
         if pure or depth >= self.config.max_depth or len(y) < self.config.min_samples_split:
             return node
 
-        n_consider = _max_features(x.shape[1], self.config.max_features)
-        if n_consider < x.shape[1]:
+        n_features = x.shape[1]
+        n_consider = max(1, int(np.sqrt(n_features))) if self.config.max_features == "sqrt" else n_features
+        if n_consider < n_features:
             features = self.rng.choice(x.shape[1], size=n_consider, replace=False)
         else:
-            features = np.arange(x.shape[1])
+            features = np.arange(n_features)
 
         split = _best_split(x, y, features, self.config.min_samples_leaf, self.config.min_impurity_decrease)
         if split is None:
             return node
 
-        feature, threshold, _gain = split
+        feature, threshold = split
         left_mask = x[:, feature] <= threshold
         if left_mask.sum() < self.config.min_samples_leaf or (~left_mask).sum() < self.config.min_samples_leaf:
             return node
@@ -178,16 +159,12 @@ class DecisionTree:
 @dataclass(frozen=True)
 class ForestConfig(TreeConfig):
     n_estimators: int = 40
-    bootstrap: bool = True
-    max_features: int | float | str | None = "sqrt"
-    max_depth: int = 4
-    min_samples_split: int = 8
-    min_samples_leaf: int = 4
+    max_features: str | None = "sqrt"
 
 
 @dataclass
 class RandomForest:
-    config: ForestConfig = field(default_factory=ForestConfig)
+    config: ForestConfig
     trees_: list[DecisionTree] = field(default_factory=list)
 
     def fit(self, x: np.ndarray, y: np.ndarray) -> "RandomForest":
@@ -197,13 +174,9 @@ class RandomForest:
         n = len(y)
         for _ in range(self.config.n_estimators):
             tree_rng = np.random.default_rng(rng.integers(0, 2**31 - 1))
-            if self.config.bootstrap:
-                sample = tree_rng.integers(0, n, size=n)
-                x_i, y_i = x[sample], y[sample]
-            else:
-                x_i, y_i = x, y
+            sample = tree_rng.integers(0, n, size=n)
             tree = DecisionTree(self.config, rng=tree_rng)
-            tree.fit(x_i, y_i)
+            tree.fit(x[sample], y[sample])
             self.trees_.append(tree)
         return self
 

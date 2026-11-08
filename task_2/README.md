@@ -70,18 +70,18 @@ only `√p` random features. The forest prediction is a majority vote.
 
 ### Validation
 
-5-fold cross-validation, folds split **within each user**.
+5-fold cross-validation, folds split **within each user**. A prediction is exact when it matches the rating, and counts for **accuracy ±1** when it is at most one point away.
 
 ## Results
 
 5-fold cross-validation on `train.csv` (mean over folds):
 
-| Model       | Description                 | Accuracy | MAE    | RMSE   |
-|-------------|-----------------------------|----------|--------|--------|
-| `user-mode` | person's most common rating | 0.4113   | 1.0526 | 1.5682 |
-| `user-mean` | person's rounded mean       | 0.3241   | 0.9721 | 1.2933 |
-| `tree`      | per-user decision tree      | 0.3534   | 1.1597 | 1.6419 |
-| `forest`    | per-user random forest      | 0.4138   | 1.0389 | 1.5501 |
+| Model       | Description                 | Accuracy | Accuracy +-1 | MAE    | RMSE   |
+|-------------|-----------------------------|----------|--------------|--------|--------|
+| `user-mode` | person's most common rating | 0.4113   | 0.7097       | 1.0526 | 1.5682 |
+| `user-mean` | person's rounded mean       | 0.3241   | 0.7533       | 0.9721 | 1.2933 |
+| `tree`      | per-user decision tree      | 0.3546   | 0.6746       | 1.1597 | 1.6419 |
+| `forest`    | per-user random forest      | 0.4128   | 0.7154       | 1.0389 | 1.5501 |
 
 `submission_tree.csv` / `submission_forest.csv` come from `tree` / `forest`.
 `tree.png` shows one person's fitted tree.
