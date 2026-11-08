@@ -100,7 +100,7 @@ def _one_hot(values: pd.Series, prefix: str) -> tuple[np.ndarray, list[str]]:
     for items in values:
         if items:
             counts.update(items)
-    vocab = list(counts)
+    vocab = sorted(counts)  # stable column order (set iteration order varies between runs)
     matrix = np.zeros((len(values), len(vocab)), dtype=np.float64)
     lookup = {name: j for j, name in enumerate(vocab)}
     for i, items in enumerate(values):

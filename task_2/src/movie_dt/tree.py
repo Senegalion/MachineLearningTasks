@@ -48,9 +48,9 @@ class Node:
 
 @dataclass(frozen=True)
 class TreeConfig:
-    max_depth: int = 4
-    min_samples_split: int = 8
-    min_samples_leaf: int = 4
+    max_depth: int = 3
+    min_samples_split: int = 32
+    min_samples_leaf: int = 16
     min_impurity_decrease: float = 1e-4
     max_features: str | None = None
     random_state: int = RANDOM_STATE
@@ -158,6 +158,9 @@ class DecisionTree:
 
 @dataclass(frozen=True)
 class ForestConfig(TreeConfig):
+    max_depth: int = 4
+    min_samples_split: int = 8
+    min_samples_leaf: int = 4
     n_estimators: int = 40
     max_features: str | None = "sqrt"
 
