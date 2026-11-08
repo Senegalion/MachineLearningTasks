@@ -1,7 +1,7 @@
 PYTHON ?= python3
 RUN = PYTHONPATH=src $(PYTHON) -m movie_dt
 
-.PHONY: install fetch evaluate submission tree test zip
+.PHONY: install fetch evaluate submission tree zip
 
 install:
 	$(PYTHON) -m pip install -r requirements.txt
@@ -20,5 +20,5 @@ tree:
 
 zip:
 	rm -f code.zip
-	zip -r code.zip src Makefile pyproject.toml requirements.txt README.md .env.example \
+	zip -r code.zip src movie resources Makefile pyproject.toml requirements.txt README.md .env.example \
 		-x '*/__pycache__/*' '*.pyc' '*/.DS_Store'

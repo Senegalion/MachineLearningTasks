@@ -20,8 +20,7 @@ make fetch        # download movie details from TMDB into resources/tmdb/
 make evaluate     # 5-fold cross-validation on train.csv
 make submission   # write submission_tree.csv, submission_forest.csv and tree.png
 make tree         # write tree.png
-make test
-make zip
+make zip          # code.zip: source, data (movie/) and TMDB cache (resources/)
 ```
 
 `PYTHONPATH=src python3 -m movie_dt {fetch,evaluate,predict,draw} --help`.
@@ -42,14 +41,14 @@ The fitted model then rates the movies that are missing in `task.csv`.
 |--------|----------|
 | genres | one 0/1 column per genre |
 | directors | one 0/1 column per director |
-| cast | one 0/1 column per person in the top 8 billed cast |
+| cast | one 0/1 column per person in the top 3 billed cast |
 | year | release year |
 | runtime | length in minutes |
 | vote_average | TMDB public score |
 | vote_count | number of TMDB votes |
-| popularity | TMDB popularity |
-| in_collection | 1 if the movie is part of a franchise |
-| adult | 1 if TMDB marks the movie as adult |
+| budget | production budget (USD) |
+| revenue | box office revenue (USD) |
+| revenue_budget_ratio | revenue / budget |
 
 Missing numeric values are filled with the median over movies.
 
@@ -59,13 +58,14 @@ A binary CART tree grown on those 90 movies:
 
 * A node tests `x_j ≤ t` (for a 0/1 flag, `t = 0.5`).
 * The split with the largest **Gini gain** on the six rating classes is kept.
-* Growth stops at depth 4, at a pure node, when a node has fewer than 8 samples,
-  when a child would have fewer than 4, or when the gain is tiny.
+* Growth stops at depth 3, at a pure node, when a node has fewer than 32 samples,
+  when a child would have fewer than 16, or when the gain is tiny. With only 90 movies
+  per person, deeper trees overfit (depth 4 / leaf 4 gave 0.355 accuracy in CV vs 0.377).
 * A leaf predicts the majority rating; ties go to the class closest to the leaf mean.
 
 ### Random forest
 
-40 such trees. Each tree sees a bootstrap sample of the 90 movies and, at every split,
+40 trees (depth ≤ 4, leaf ≥ 4 — averaging compensates for the extra variance). Each tree sees a bootstrap sample of the 90 movies and, at every split,
 only `√p` random features. The forest prediction is a majority vote.
 
 ### Validation
@@ -80,8 +80,8 @@ only `√p` random features. The forest prediction is a majority vote.
 |-------------|-----------------------------|----------|--------------|--------|--------|
 | `user-mode` | person's most common rating | 0.4113   | 0.7097       | 1.0526 | 1.5682 |
 | `user-mean` | person's rounded mean       | 0.3241   | 0.7533       | 0.9721 | 1.2933 |
-| `tree`      | per-user decision tree      | 0.3546   | 0.6746       | 1.1597 | 1.6419 |
-| `forest`    | per-user random forest      | 0.4128   | 0.7154       | 1.0389 | 1.5501 |
+| `tree`      | per-user decision tree      | 0.3771   | 0.6955       | 1.0989 | 1.5859 |
+| `forest`    | per-user random forest      | 0.4145   | 0.7168       | 1.0333 | 1.5437 |
 
 `submission_tree.csv` / `submission_forest.csv` come from `tree` / `forest`.
 `tree.png` shows one person's fitted tree.
