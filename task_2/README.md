@@ -58,9 +58,10 @@ A binary CART tree grown on those 90 movies:
 
 * A node tests `x_j ≤ t` (for a 0/1 flag, `t = 0.5`).
 * The split with the largest **Gini gain** on the six rating classes is kept.
-* Growth stops at depth 3, at a pure node, when a node has fewer than 32 samples,
+* Growth stops at depth 2, at a pure node, when a node has fewer than 32 samples,
   when a child would have fewer than 16, or when the gain is tiny. With only 90 movies
-  per person, deeper trees overfit (depth 4 / leaf 4 gave 0.355 accuracy in CV vs 0.377).
+  per person, deeper trees overfit: in CV (leaf ≥ 16) depth 2 gave 0.379 accuracy,
+  depth 3 gave 0.377, and depth 4 / leaf 4 only 0.355.
 * A leaf predicts the majority rating; ties go to the class closest to the leaf mean.
 
 ### Random forest
@@ -80,7 +81,7 @@ only `√p` random features. The forest prediction is a majority vote.
 |-------------|-----------------------------|----------|--------------|--------|--------|
 | `user-mode` | person's most common rating | 0.4113   | 0.7097       | 1.0526 | 1.5682 |
 | `user-mean` | person's rounded mean       | 0.3241   | 0.7533       | 0.9721 | 1.2933 |
-| `tree`      | per-user decision tree      | 0.3771   | 0.6955       | 1.0989 | 1.5859 |
+| `tree`      | per-user decision tree      | 0.3790   | 0.6968       | 1.0944 | 1.5813 |
 | `forest`    | per-user random forest      | 0.4145   | 0.7168       | 1.0333 | 1.5437 |
 
 `submission_tree.csv` / `submission_forest.csv` come from `tree` / `forest`.

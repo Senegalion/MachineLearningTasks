@@ -48,7 +48,7 @@ class Node:
 
 @dataclass(frozen=True)
 class TreeConfig:
-    max_depth: int = 3
+    max_depth: int = 2
     min_samples_split: int = 32
     min_samples_leaf: int = 16
     min_impurity_decrease: float = 1e-4
