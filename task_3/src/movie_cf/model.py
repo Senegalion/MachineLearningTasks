@@ -28,40 +28,34 @@ class UserUserRecommender(BaseEstimator):
             {"user_id": np.asarray(X["user_id"]), "movie_id": np.asarray(X["movie_id"]), "rating": ratings}
         )
         self.matrix_ = RatingMatrix.from_frame(frame)
-        # A negative similarity never votes or enters the average.
-        self.weights_ = np.nan_to_num(np.clip(user_similarity(self.matrix_.values, self.similarity), 0.0, None))
-        np.fill_diagonal(self.weights_, 0.0)
+        # A negative similarity never votes or enters the average. The diagonal is already 0.
+        self.weights_ = np.clip(user_similarity(self.matrix_.values, self.similarity), 0.0, None)
         self.fallback_ = mode(ratings)
         return self
 
-    def estimate(self, X: pd.DataFrame) -> np.ndarray:
-        """Unrounded prediction. With no eligible neighbour this is the person's most common rating."""
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        """Rounded prediction. With no eligible neighbour this is the person's most common rating."""
         if not hasattr(self, "matrix_"):
             raise RuntimeError("Call fit before estimate.")
         users = pd.Series(np.asarray(X["user_id"])).map(self.matrix_.user_index)
         movies = pd.Series(np.asarray(X["movie_id"])).map(self.matrix_.movie_index)
         known_user = users.notna().to_numpy()
-        known_both = (users.notna() & movies.notna()).to_numpy()
+        known_both = (known_user & movies.notna().to_numpy())
 
         # Unknown person: global mode. Known person but unseen movie: that person's mode.
         raw = np.full(len(X), self.fallback_, dtype=float)
-        if known_user.any():
-            raw[known_user] = self.matrix_.user_modes[users[known_user].to_numpy(dtype=int)]
-        if known_both.any():
-            raw[known_both] = predict(
-                self.weights_,
-                self.matrix_.values,
-                self.matrix_.user_means,
-                self.matrix_.user_modes,
-                self.aggregation,
-                self.k,
-                users[known_both].to_numpy(dtype=int),
-                movies[known_both].to_numpy(dtype=int),
-            )
-        return raw
-
-    def predict(self, X: pd.DataFrame) -> np.ndarray:
-        return round_half_up(self.estimate(X))
+        raw[known_user] = self.matrix_.user_modes[users[known_user].to_numpy(dtype=int)]
+        raw[known_both] = predict(
+            self.weights_,
+            self.matrix_.values,
+            self.matrix_.user_means,
+            self.matrix_.user_modes,
+            self.aggregation,
+            self.k,
+            users[known_both].to_numpy(dtype=int),
+            movies[known_both].to_numpy(dtype=int),
+        )
+        return round_half_up(raw)
 
 
 class UserModeBaseline(BaseEstimator):

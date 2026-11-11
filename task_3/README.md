@@ -14,7 +14,6 @@ python3 -m pip install -r requirements.txt
 make evaluate    # 5-fold cross-validation on train.csv
 make tune        # grid-search similarity, aggregation, and k
 make submission  # fit on train.csv and write submission.csv
-make test        # unit tests, including a comparison with Surprise
 make zip         # build code.zip
 ```
 
@@ -31,10 +30,12 @@ Two people are compared only on the movies both rated.
 
 | Name | Definition |
 |------|------------|
+| `cosine` | cosine similarity on the shared movies |
 | `mae` | `1 - mean(\|rating_a - rating_b\|) / 5` |
-| `pearson` | Pearson correlation on the shared movies (centered cosine). Means are the averages on that shared set |
+| `pearson` | Pearson correlation on the shared movies. Means are the averages on that shared set |
+| `spearman` | Spearman rank correlation on the shared movies |
 
-A negative Pearson correlation is dropped. The person's own ratings are not used as a neighbour.
+A negative similarity is dropped. The person's own ratings are not used as a neighbour.
 
 ### Prediction
 
@@ -51,7 +52,7 @@ The result is clipped to 0–5 and rounded half up. If nobody eligible rated the
 
 ### Choosing k, similarity, and aggregation
 
-`movie_cf tune` runs `sklearn.model_selection.GridSearchCV` over `similarity ∈ {mae, pearson}`, `aggregation ∈ {mean, vote}`, and `k ∈ {1, 2, 5, 10, 20, 40}`. Folds are split inside each person. The score is exact-match accuracy minus `0.01 × MAE`.
+`movie_cf tune` runs `sklearn.model_selection.GridSearchCV` over `similarity ∈ {cosine, mae, pearson, spearman}`, `aggregation ∈ {mean, vote}`, and `k ∈ {1, 2, 3, 4, 5, 8, 10, 15, 20, 30, 40}`. Folds are split inside each person. The chosen model is the one with the highest exact-match accuracy.
 
 ## Results
 
@@ -71,15 +72,14 @@ The result is clipped to 0–5 and rounded half up. If nobody eligible rated the
 
 ```
 src/movie_cf/
+  __main__.py       command line
+  aggregate.py      weighted mean and weighted vote of the k neighbours
   config.py         paths, the rating scale, and the selected parameters
   data.py           CSV input and the submission
-  similarity.py     Pearson and mean-absolute-difference similarity
-  aggregate.py      weighted mean and weighted vote of the k neighbours
-  model.py          the kNN recommender and the two baselines
-  tuning.py         scikit-learn grid search
   evaluation.py     metrics and per-person folds
-  __main__.py       command line
-tests/              unit tests and the Surprise comparison
+  model.py          the kNN recommender and the two baselines
+  similarity.py     cosine, mean-absolute-error, Pearson, and Spearman similarity
+  tuning.py         scikit-learn grid search
 movie/              train.csv and task.csv
 resources/cv_grid.csv
 ```

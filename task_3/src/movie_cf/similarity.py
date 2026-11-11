@@ -3,7 +3,7 @@ import pandas as pd
 
 from movie_cf.config import RATING_MAX, RATING_MIN
 
-SIMILARITIES = ("pearson", "mae")
+SIMILARITIES = ("cosine", "mae", "pearson", "spearman")
 RATING_SPAN = RATING_MAX - RATING_MIN
 
 
@@ -29,58 +29,41 @@ class RatingMatrix:
 
 def mode(values: np.ndarray) -> int:
     """Most common rating. Ties go to the higher rating."""
-    observed = np.asarray(values, dtype=float)
-    observed = observed[np.isfinite(observed)].astype(int)
-    counts = np.bincount(observed, minlength=RATING_MAX + 1)
-    return int(np.flatnonzero(counts == counts.max())[-1])
+    return int(pd.Series(np.asarray(values, dtype=float)).dropna().mode().iloc[-1])
 
 
 def user_similarity(ratings: np.ndarray, kind: str) -> np.ndarray:
-    """Pairwise person similarity. The diagonal is 0, so a person is not their own neighbour."""
-    if kind == "pearson":
-        similarity = _pearson(ratings)
-    elif kind == "mae":
-        similarity = _mae(ratings)
-    else:
+    """Pairwise person similarity. The diagonal is 0, so a person is not their own neighbour.
+
+    pandas compares each pair only on the movies both rated. No shared movie, or a correlation
+    that is undefined because a rating is constant, gets similarity 0.
+    """
+    if kind not in SIMILARITIES:
         raise ValueError(f"Unknown similarity {kind!r}. Expected one of {SIMILARITIES}.")
+    people = pd.DataFrame(np.asarray(ratings, dtype=float).T)
+    if kind in ("pearson", "spearman"):
+        # One shared movie makes a correlation undefined. Cosine and mean absolute error are not.
+        similarity = people.corr(method=kind, min_periods=2)
+    else:
+        similarity = people.corr(method=_cosine_similarity if kind == "cosine" else _mae_similarity)
+    similarity = np.nan_to_num(similarity.to_numpy(dtype=float), nan=0.0)
     np.clip(similarity, -1.0, 1.0, out=similarity)
     np.fill_diagonal(similarity, 0.0)
     return similarity
 
-def _pearson(ratings: np.ndarray) -> np.ndarray:
-    """Pearson correlation on the movies both people rated.
 
-    Means are the averages on that shared set. A pair with no shared movie, or with a
-    constant rating on the overlap, gets similarity 0.
-    """
-    mask = np.isfinite(ratings)
-    present = mask.astype(float)
-    filled = np.where(mask, ratings, 0.0)
-    # overlap[i, j] counts movies both rated. The other products are sums over that same set:
-    # missing ratings were filled with 0 and then multiplied by the other person's mask.
-    overlap = present @ present.T
-    sum_ratings = filled @ present.T
-    sum_squares = (filled**2) @ present.T
-    dot = filled @ filled.T
+def _cosine_similarity(left: np.ndarray, right: np.ndarray) -> float:
+    """Cosine similarity. pandas has already dropped movies only one person rated."""
+    if len(left) == 0:
+        return 0.0
+    denominator = float(np.linalg.norm(left) * np.linalg.norm(right))
+    if denominator == 0.0:
+        return 0.0
+    return float(np.dot(left, right) / denominator)
 
-    mean_i = np.divide(sum_ratings, overlap, out=np.zeros_like(sum_ratings), where=overlap > 0)
-    mean_j = mean_i.T
-    covariance = dot - overlap * mean_i * mean_j
-    variance_i = np.maximum(sum_squares - overlap * mean_i**2, 0.0)
-    variance_j = variance_i.T
-    denominator = np.sqrt(variance_i * variance_j)
-    return np.divide(covariance, denominator, out=np.zeros_like(covariance), where=denominator > 1e-12)
 
-def _mae(ratings: np.ndarray) -> np.ndarray:
-    """1 − (mean absolute difference) / rating span, on movies both people rated."""
-    mask = np.isfinite(ratings)
-    present = mask.astype(float)
-    overlap = present @ present.T
-    # One movie at a time: add |ra − rb| for every pair who both rated it.
-    absolute_sum = np.zeros((ratings.shape[0], ratings.shape[0]), dtype=float)
-    for movie in range(ratings.shape[1]):
-        rated_by = np.flatnonzero(mask[:, movie])
-        values = ratings[rated_by, movie]
-        absolute_sum[np.ix_(rated_by, rated_by)] += np.abs(values[:, None] - values[None, :])
-    mean_absolute = np.divide(absolute_sum, overlap, out=np.zeros_like(absolute_sum), where=overlap > 0)
-    return np.where(overlap > 0, 1.0 - mean_absolute / RATING_SPAN, 0.0)
+def _mae_similarity(left: np.ndarray, right: np.ndarray) -> float:
+    """1 − (mean absolute error) / rating span. pandas has already dropped movies only one person rated."""
+    if len(left) == 0:
+        return 0.0
+    return 1.0 - float(np.mean(np.abs(left - right))) / RATING_SPAN
