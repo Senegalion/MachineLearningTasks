@@ -7,7 +7,7 @@ from movie_cf.evaluation import cross_validator
 from movie_cf.model import FEATURES, UserUserRecommender
 from movie_cf.similarity import SIMILARITIES
 
-K_VALUES = (1, 2, 3, 4, 5, 8, 10, 15, 20, 30, 40)
+K_VALUES = (1, 2, 3, 4, 5, 8, 10, 15, 20)
 
 
 def search(ratings: pd.DataFrame, n_folds: int = 5) -> GridSearchCV:

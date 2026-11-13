@@ -2,7 +2,7 @@ import numpy as np
 
 from movie_cf.config import RATING_MAX, RATING_MIN
 
-AGGREGATIONS = ("mean", "vote")
+AGGREGATIONS = ("mean", "mean_weighted",  "vote", "vote_weighted")
 
 
 def round_half_up(values: np.ndarray) -> np.ndarray:
@@ -13,7 +13,6 @@ def round_half_up(values: np.ndarray) -> np.ndarray:
 def predict(
     weights: np.ndarray,
     ratings: np.ndarray,
-    user_means: np.ndarray,
     user_modes: np.ndarray,
     aggregation: str,
     k: int,
@@ -24,21 +23,22 @@ def predict(
 
     A neighbour needs a positive similarity. Nobody eligible means the person's most common rating.
     """
-    if aggregation not in AGGREGATIONS:
-        raise ValueError(f"Unknown aggregation {aggregation!r}. Expected one of {AGGREGATIONS}.")
     # Closest person first. Stable, so equal similarities keep their original order.
     order = np.argsort(-weights, axis=1, kind="stable")
     predicted = np.empty(len(users), dtype=float)
     for index, (person, movie) in enumerate(zip(users, movies)):
         person, movie = int(person), int(movie)
-        neighbours = _nearest(order[person], weights[person], ratings[:, movie], int(k))
+        neighbours = _nearest(order[person], weights[person], ratings[:, movie], k)
         if len(neighbours) == 0:
             predicted[index] = user_modes[person]
         elif aggregation == "mean":
+            predicted[index] = np.mean(ratings[neighbours, movie])
+        elif aggregation == "mean_weighted":
             predicted[index] = np.average(ratings[neighbours, movie], weights=weights[person, neighbours])
         else:
-            predicted[index] = _vote(ratings[neighbours, movie], weights[person, neighbours], user_means[person])
-    return predicted
+            vote_weights = weights[person, neighbours] if aggregation == "vote_weighted" else np.ones(len(neighbours))
+            predicted[index] = _vote(ratings[neighbours, movie], vote_weights, user_modes[person])
+    return round_half_up(predicted)
 
 
 def _nearest(ranked_people: np.ndarray, weight_row: np.ndarray, movie_ratings: np.ndarray, k: int) -> list[int]:
@@ -54,8 +54,8 @@ def _nearest(ranked_people: np.ndarray, weight_row: np.ndarray, movie_ratings: n
     return chosen
 
 
-def _vote(neighbour_ratings: np.ndarray, neighbour_weights: np.ndarray, user_mean: float) -> float:
-    """Rating with the largest total similarity. A tie goes to the rating closest to this person's mean.
+def _vote(neighbour_ratings: np.ndarray, neighbour_weights: np.ndarray, user_mode: float) -> float:
+    """Rating with the largest total similarity. A tie goes to the rating closest to this person's most common rating.
 
     Equal distance keeps the lower rating.
     """
@@ -63,5 +63,5 @@ def _vote(neighbour_ratings: np.ndarray, neighbour_weights: np.ndarray, user_mea
     for rating, weight in zip(neighbour_ratings, neighbour_weights):
         totals[int(rating)] += weight
     tied = np.flatnonzero(totals == totals.max())
-    closest = tied[np.abs(tied - user_mean) == np.abs(tied - user_mean).min()]
+    closest = tied[np.abs(tied - user_mode) == np.abs(tied - user_mode).min()]
     return float(closest[0])

@@ -16,5 +16,5 @@ RANDOM_STATE = 42
 
 # Replaced by the winner of `movie_cf tune` (scikit-learn grid search).
 SELECTED_SIMILARITY = "mae"
-SELECTED_AGGREGATION = "vote"
+SELECTED_AGGREGATION = "vote_weighted"
 SELECTED_K = 2

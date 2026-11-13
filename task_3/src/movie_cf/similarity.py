@@ -3,7 +3,7 @@ import pandas as pd
 
 from movie_cf.config import RATING_MAX, RATING_MIN
 
-SIMILARITIES = ("cosine", "mae", "pearson", "spearman")
+SIMILARITIES = ("mse", "mae", "pearson", "spearman", "kendall")
 RATING_SPAN = RATING_MAX - RATING_MIN
 
 
@@ -14,14 +14,15 @@ class RatingMatrix:
         self.values = values
         self.user_index = user_index
         self.movie_index = movie_index
-        self.user_means = np.nanmean(values, axis=1)
         self.user_modes = np.array([mode(row) for row in values], dtype=float)
 
     @classmethod
     def from_frame(cls, frame: pd.DataFrame) -> "RatingMatrix":
+        """Pivot a user_id, movie_id, rating frame into a sorted users × movies matrix."""
         table = frame.pivot(index="user_id", columns="movie_id", values="rating")
         table = table.sort_index().sort_index(axis=1)
         values = table.to_numpy(dtype=float)
+        # Map each user/movie id to its row/column in values (0 .. n-1).
         user_index = pd.Series(np.arange(len(table.index)), index=table.index)
         movie_index = pd.Series(np.arange(len(table.columns)), index=table.columns)
         return cls(values, user_index, movie_index)
@@ -38,28 +39,23 @@ def user_similarity(ratings: np.ndarray, kind: str) -> np.ndarray:
     pandas compares each pair only on the movies both rated. No shared movie, or a correlation
     that is undefined because a rating is constant, gets similarity 0.
     """
-    if kind not in SIMILARITIES:
-        raise ValueError(f"Unknown similarity {kind!r}. Expected one of {SIMILARITIES}.")
+    # Transpose the ratings matrix to get movies × people, because corr operates on columns.
     people = pd.DataFrame(np.asarray(ratings, dtype=float).T)
-    if kind in ("pearson", "spearman"):
-        # One shared movie makes a correlation undefined. Cosine and mean absolute error are not.
+    if kind in ("pearson", "spearman", "kendall"):
         similarity = people.corr(method=kind, min_periods=2)
     else:
-        similarity = people.corr(method=_cosine_similarity if kind == "cosine" else _mae_similarity)
+        similarity = people.corr(method=_mse_similarity if kind == "mse" else _mae_similarity)
     similarity = np.nan_to_num(similarity.to_numpy(dtype=float), nan=0.0)
     np.clip(similarity, -1.0, 1.0, out=similarity)
     np.fill_diagonal(similarity, 0.0)
     return similarity
 
 
-def _cosine_similarity(left: np.ndarray, right: np.ndarray) -> float:
-    """Cosine similarity. pandas has already dropped movies only one person rated."""
+def _mse_similarity(left: np.ndarray, right: np.ndarray) -> float:
+    """1 − (mean squared error) / rating span². pandas has already dropped movies only one person rated."""
     if len(left) == 0:
         return 0.0
-    denominator = float(np.linalg.norm(left) * np.linalg.norm(right))
-    if denominator == 0.0:
-        return 0.0
-    return float(np.dot(left, right) / denominator)
+    return 1.0 - float(np.mean((left - right) ** 2)) / (RATING_SPAN**2)
 
 
 def _mae_similarity(left: np.ndarray, right: np.ndarray) -> float:
