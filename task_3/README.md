@@ -73,7 +73,7 @@ A vote tie goes to the rating closest to this person's most common rating. Equal
 | `pearson` | `vote` | 2 | 0.4449 | 0.0023 | 0.9279 |
 | `spearman` | `vote` | 2 | 0.4422 | 0.0024 | 0.9373 |
 
-Accuracy falls as `k` grows: the same `mae` / `vote_weighted` model is 0.5034 at `k = 3` and 0.3551 at `k = 40`. Correlation similarities top out at 0.445. The grid search selects `mae`, `vote_weighted`, and `k = 2`. `config.py` still builds `submission.csv` with `mae`, `vote`, and `k = 2` (accuracy 0.5122). The full grid is in `resources/cv_grid.csv`.
+Accuracy falls as `k` grows: the same `mae` / `vote_weighted` model is 0.5034 at `k = 3` and 0.3551 at `k = 40`. Correlation similarities top out at 0.445. The grid search selects `mae`, `vote_weighted`, and `k = 2`, and `submission.csv` is built with exactly this configuration (`config.py`). The full grid is in `resources/cv_grid.csv`.
 
 ## Project layout
 
