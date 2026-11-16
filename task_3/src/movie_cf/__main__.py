@@ -20,6 +20,7 @@ SELECTED = {
     "similarity": config.SELECTED_SIMILARITY,
     "aggregation": config.SELECTED_AGGREGATION,
     "k": config.SELECTED_K,
+    "power": config.SELECTED_POWER,
 }
 
 
@@ -47,7 +48,11 @@ def tune(args: argparse.Namespace) -> None:
     print(table.round(4).to_string(index=False))
     best = grid.best_params_
     logger.info(
-        "Best configuration: similarity=%s aggregation=%s k=%s", best["similarity"], best["aggregation"], best["k"]
+        "Best configuration: similarity=%s aggregation=%s k=%s power=%s",
+        best["similarity"],
+        best["aggregation"],
+        best["k"],
+        best["power"],
     )
     logger.info("Saved %d configurations to %s", len(table), args.output)
 
@@ -59,12 +64,13 @@ def predict(args: argparse.Namespace) -> None:
     predictions = pd.Series(model.predict(task[FEATURES]), index=task.index)
     data.save_submission(task, predictions, args.output)
     logger.info(
-        "Saved %d predictions to %s (%s/%s/k=%s)",
+        "Saved %d predictions to %s (%s/%s/k=%s/power=%s)",
         len(task),
         args.output,
         SELECTED["similarity"],
         SELECTED["aggregation"],
         SELECTED["k"],
+        SELECTED["power"],
     )
 
 
@@ -77,7 +83,7 @@ def parse_args() -> argparse.Namespace:
     evaluate_parser.add_argument("--only", nargs="+", choices=[*BASELINES, SELECTED_NAME], help="models to evaluate")
     evaluate_parser.set_defaults(handler=evaluate)
 
-    tune_parser = commands.add_parser("tune", help="grid-search similarity, aggregation, and k")
+    tune_parser = commands.add_parser("tune", help="grid-search similarity, aggregation, k, and power")
     tune_parser.add_argument("--folds", type=int, default=5)
     tune_parser.add_argument("--output", type=Path, default=config.GRID_RESULTS_PATH)
     tune_parser.set_defaults(handler=tune)

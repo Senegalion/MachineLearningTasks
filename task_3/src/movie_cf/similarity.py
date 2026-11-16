@@ -3,7 +3,7 @@ import pandas as pd
 
 from movie_cf.config import RATING_MAX, RATING_MIN
 
-SIMILARITIES = ("mse", "mae", "pearson", "spearman", "kendall")
+SIMILARITIES = ("mse", "mae", "pearson", "exact")
 RATING_SPAN = RATING_MAX - RATING_MIN
 
 
@@ -41,10 +41,12 @@ def user_similarity(ratings: np.ndarray, kind: str) -> np.ndarray:
     """
     # Transpose the ratings matrix to get movies × people, because corr operates on columns.
     people = pd.DataFrame(np.asarray(ratings, dtype=float).T)
-    if kind in ("pearson", "spearman", "kendall"):
-        similarity = people.corr(method=kind, min_periods=2)
+    if kind == "pearson":
+        similarity = people.corr(method="pearson", min_periods=2)
+    elif kind in _CUSTOM:
+        similarity = people.corr(method=_CUSTOM[kind])
     else:
-        similarity = people.corr(method=_mse_similarity if kind == "mse" else _mae_similarity)
+        raise ValueError(f"Unknown similarity {kind!r}. Expected one of {SIMILARITIES}.")
     similarity = np.nan_to_num(similarity.to_numpy(dtype=float), nan=0.0)
     np.clip(similarity, -1.0, 1.0, out=similarity)
     np.fill_diagonal(similarity, 0.0)
@@ -63,3 +65,13 @@ def _mae_similarity(left: np.ndarray, right: np.ndarray) -> float:
     if len(left) == 0:
         return 0.0
     return 1.0 - float(np.mean(np.abs(left - right))) / RATING_SPAN
+
+
+def _exact_similarity(left: np.ndarray, right: np.ndarray) -> float:
+    """Share of the shared movies on which both people gave the same rating. pandas has already dropped movies only one person rated."""
+    if len(left) == 0:
+        return 0.0
+    return float(np.mean(left == right))
+
+
+_CUSTOM = {"mse": _mse_similarity, "mae": _mae_similarity, "exact": _exact_similarity}

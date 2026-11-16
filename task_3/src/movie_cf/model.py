@@ -11,20 +11,28 @@ FEATURES = ["user_id", "movie_id"]
 class UserUserRecommender(BaseEstimator):
     """User-based kNN over people who rated the same movies."""
 
-    def __init__(self, similarity: str = "mae", aggregation: str = "vote", k: int = 2) -> None:
+    def __init__(self, similarity: str = "mae", aggregation: str = "vote", k: int = 2, power: float = 1.0) -> None:
         self.similarity = similarity
         self.aggregation = aggregation
         self.k = k
+        self.power = power
 
     def fit(self, X: pd.DataFrame, y: np.ndarray | pd.Series) -> "UserUserRecommender":
+        if self.k < 1:
+            raise ValueError("k must be at least 1.")
+        if self.power <= 0:
+            raise ValueError("power must be positive.")
         ratings = np.asarray(y)
         frame = pd.DataFrame(
             {"user_id": np.asarray(X["user_id"]), "movie_id": np.asarray(X["movie_id"]), "rating": ratings}
         )
         # Build users x movies matrix
         self.matrix_ = RatingMatrix.from_frame(frame)
-        # Compute user similarity matrix (users x users)
-        self.weights_ = np.clip(user_similarity(self.matrix_.values, self.similarity), 0.0, None)
+        # Compute user similarity matrix (users x users). Negative similarity is dropped.
+        similarity = np.clip(user_similarity(self.matrix_.values, self.similarity), 0.0, None)
+        # Weight of a neighbour is similarity ** power. A higher power lets the closest people dominate
+        # the weighted aggregations. It does not change who the nearest neighbours are.
+        self.weights_ = similarity**self.power
         # Fallback is the mode of all ratings of all users, it is used if the 
         # prediction is not possible, because no user and no movie were seen in the training set
         self.fallback_ = mode(ratings)

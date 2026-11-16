@@ -15,6 +15,7 @@ RATING_MAX = RATINGS[-1]
 RANDOM_STATE = 42
 
 # Replaced by the winner of `movie_cf tune` (scikit-learn grid search).
-SELECTED_SIMILARITY = "mae"
+SELECTED_SIMILARITY = "exact"
 SELECTED_AGGREGATION = "vote_weighted"
-SELECTED_K = 2
+SELECTED_K = 40
+SELECTED_POWER = 4.0

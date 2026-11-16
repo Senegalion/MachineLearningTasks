@@ -12,7 +12,7 @@ python3 -m pip install -r requirements.txt
 
 ```bash
 make evaluate    # 5-fold cross-validation on train.csv
-make tune        # grid-search similarity, aggregation, and k
+make tune        # grid-search similarity, aggregation, k, and power
 make submission  # fit on train.csv and write submission.csv
 make zip         # build code.zip
 ```
@@ -30,17 +30,18 @@ Two people are compared only on the movies both rated.
 
 | Name | Definition |
 |------|------------|
-| `mse` | `1 - mean((rating_a - rating_b)²) / 25` |
+| `exact` | share of the shared movies on which both gave exactly the same rating |
 | `mae` | `1 - mean(\|rating_a - rating_b\|) / 5` |
+| `mse` | `1 - mean((rating_a - rating_b)²) / 25` |
 | `pearson` | Pearson correlation on the shared movies |
-| `spearman` | Spearman rank correlation on the shared movies |
-| `kendall` | Kendall rank correlation on the shared movies |
+
+In every measure, people are more similar the more alike their ratings of the shared movies are.
 
 A negative similarity is dropped. The person's own ratings are not used as a neighbour.
 
 ### Prediction
 
-Take the `k` people with the largest positive similarity who have rated the movie.
+Take the `k` people with the largest positive similarity who have rated the movie. A person who has not rated the movie is never used for it. Each chosen neighbour has the weight `similarity ** power`: a higher power lets the closest people decide, while the more distant ones only break ties. The power does not change who the nearest neighbours are, and the unweighted `mean` and `vote` ignore it.
 
 | Aggregation | Prediction |
 |-------------|------------|
@@ -51,29 +52,26 @@ Take the `k` people with the largest positive similarity who have rated the movi
 
 A vote tie goes to the rating closest to this person's most common rating. Equal distance keeps the lower rating. The result is clipped to 0–5 and rounded half up. If nobody eligible rated the movie, the prediction is this person's most common rating. A tie between several of their ratings uses the highest one.
 
-`mean_weighted` with Pearson similarity is the same estimator as Surprise's `KNNBasic`. At `k = 1` every aggregation returns that single neighbour, so the four rows are identical.
+At `k = 1` every aggregation returns that single neighbour, so the four aggregations give identical results.
 
-### Choosing k, similarity, and aggregation
+### Choosing similarity, aggregation, k, and power
 
-`movie_cf tune` runs `sklearn.model_selection.GridSearchCV` over every similarity, every aggregation, and a list of `k`. Folds are split inside each person. The chosen model is the one with the highest exact-match accuracy. The run in `resources/cv_grid.csv` used `similarity ∈ {mse, mae, pearson, spearman, kendall}`, `aggregation ∈ {mean, mean_weighted, vote, vote_weighted}`, and `k ∈ {1, 2, 3, 4, 5, 8, 10, 15, 20}` (220 configurations).
+`movie_cf tune` runs `sklearn.model_selection.GridSearchCV` with 5-fold cross-validation on `train.csv` over `similarity ∈ {exact, mae, mse, pearson}`, `aggregation ∈ {mean, mean_weighted, vote, vote_weighted}`, `k ∈ {1, 2, 3, 5, 10, 20, 40, 80}`, and `power ∈ {1, 2, 4, 8}` (512 configurations). Folds are split inside each person, so every person keeps ratings in every training split. The chosen model is the one with the highest exact-match accuracy on the held-out folds.
 
 ## Results
 
-5-fold cross-validation on `train.csv` (mean over folds). `mae` with `vote_weighted` and `k = 2` won the grid search. The next `mae` row is `k = 1`, where aggregation does not matter. The other rows are the remaining `mae` aggregations at `k = 2`, then the best `k = 2` configuration of each other similarity:
+5-fold cross-validation on `train.csv` (mean over folds). `exact` with `vote_weighted`, `k = 40`, and `power = 4` won the grid search, and `submission.csv` is built with exactly this configuration (`config.py`). The first rows are the best configuration of each similarity, then the two constant baselines (`python -m movie_cf evaluate`):
 
-| Similarity | Aggregation | k | Accuracy | Accuracy std | MAE |
-|------------|-------------|---|----------|--------------|-----|
-| `mae` | `vote_weighted` | 2 | **0.5212** | 0.0063 | 0.7962 |
-| `mae` | any | 1 | 0.5204 | 0.0070 | 0.7990 |
-| `mae` | `vote` | 2 | 0.5122 | 0.0039 | 0.7834 |
-| `mae` | `mean_weighted` | 2 | 0.4812 | 0.0057 | 0.7902 |
-| `mae` | `mean` | 2 | 0.4592 | 0.0039 | 0.8239 |
-| `mse` | `vote_weighted` | 2 | 0.4940 | 0.0066 | 0.8018 |
-| `kendall` | `vote` | 2 | 0.4453 | 0.0034 | 0.9288 |
-| `pearson` | `vote` | 2 | 0.4449 | 0.0023 | 0.9279 |
-| `spearman` | `vote` | 2 | 0.4422 | 0.0024 | 0.9373 |
+| Similarity | Aggregation | k | power | Accuracy | Accuracy std | MAE |
+|------------|-------------|---|-------|----------|--------------|-----|
+| `exact` | `vote_weighted` | 40 | 4 | **0.5511** | 0.0036 | 0.7653 |
+| `mae` | `vote_weighted` | 2 | 1 | 0.5212 | 0.0063 | 0.7962 |
+| `mse` | `vote_weighted` | 2 | 1 | 0.4940 | 0.0066 | 0.8018 |
+| `pearson` | `vote` | 2 | 1 | 0.4449 | 0.0023 | 0.9279 |
+| baseline: person's most common rating | | | | 0.4113 | 0.0040 | 1.0526 |
+| baseline: person's rounded mean | | | | 0.3241 | 0.0070 | 0.9721 |
 
-Accuracy falls as `k` grows: the same `mae` / `vote_weighted` model is 0.5034 at `k = 3` and 0.3551 at `k = 40`. Correlation similarities top out at 0.445. The grid search selects `mae`, `vote_weighted`, and `k = 2`, and `submission.csv` is built with exactly this configuration (`config.py`). The full grid is in `resources/cv_grid.csv`.
+Why `exact` and a high power work here: many people in `train.csv` have a near copy. 105 of the 358 people have someone who gave the same rating on every movie they share, and every pair shares at least 22 movies. The best predictor is therefore what the people who rate exactly like this person gave. With `power = 1` the many more distant neighbours outvote those near copies (`exact`, `vote_weighted`, `k = 40`: 0.4749), `power = 2` gives 0.5316, `power = 4` gives 0.5511, and `power = 8` gives 0.5432. With `power = 4`, accuracy is 0.5467 at `k = 10`, 0.5502 at `k = 20`, 0.5511 at `k = 40`, and 0.5507 at `k = 80`, so the choice is not a lucky spike. The full grid is in `resources/cv_grid.csv`.
 
 ## Project layout
 
@@ -85,7 +83,7 @@ src/movie_cf/
   data.py           CSV input and the submission
   evaluation.py     metrics and per-person folds
   model.py          the kNN recommender and the two baselines
-  similarity.py     mean-squared-error, mean-absolute-error, Pearson, Spearman, and Kendall similarity
+  similarity.py     exact-agreement, mean-absolute-error, mean-squared-error, and Pearson similarity
   tuning.py         scikit-learn grid search
 movie/              train.csv and task.csv
 resources/cv_grid.csv
